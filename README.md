@@ -1,5 +1,6 @@
 # RCONClient
-An RCON client to communicate with a Minecraft server written in Haskell 
+An RCON client to communicate with a Minecraft server written in Haskell.
+Refer [https://developer.valvesoftware.com/wiki/Source_RCON_Protocol] to understand more about RCON protocol
 
 # Introduction
 
