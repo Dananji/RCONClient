@@ -14,4 +14,4 @@ This includes the basic functionalities for;
 1. Clone the Git repository using 'git clone https://github.com/Dananji/RCONClient.git'
 2. Open the terminal, and browse into the cloned project folder
 3. Create the .exe file with the 'ghc -o rconclient RCONClient.hs' command
-4. Then execute 'rconclient.exe <"host"> <port>
+4. Then execute 'rconclient.exe <"host"> <port>', example rconclient.exe "127.0.0.1" 25575
