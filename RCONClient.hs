@@ -29,10 +29,11 @@ main = do
         else connectTo (head args) (( read . last ) args)
   (responseType, pId) <- authenticateRCON s
   if (responseType == pId) 
-    then putStrLn "Authenticated!! Enter Q to exit!" 
-    else putStrLn "Error!! Try again."
-  commandProcessor s
-  sClose s
+    then do putStrLn "Authenticated!! Enter Q to exit!" 
+            commandProcessor s
+            sClose s 
+    else do putStrLn "Error!! Try again."
+            sClose s
 
 -- | Read the user inputs in command line and process them  
 commandProcessor :: Socket -> IO ()
