@@ -10,19 +10,15 @@ import           Data.Word
 import           Data.Bits
 import qualified Data.ByteString.Lazy as BL ( unpack, pack )
 import qualified Data.ByteString.Lazy.Char8 as B8 ( pack, unpack )
+import qualified Data.ByteString.Char8 as BL8
 import qualified Data.ByteString as B ( pack, unpack, take, drop, init )
-import System.Environment (getArgs)
+import           System.Environment ( getArgs )
   
--- | Data constructor for the RCON request packet
-data RCONPacket = 
-  RCONPacket { size :: Int
-             , pktID :: Int
-			 , pktType :: Int
-			 , payload :: [Word8]
-			 } deriving (Show, Eq)
+
+_MAX_RECV_BYTES = 1024  
   
 main :: IO ()
-main = do
+main = withSocketsDo $ do
   args <- getArgs
   s <- if (args == [])
         then connectTo "127.0.0.1" 25575
@@ -32,7 +28,7 @@ main = do
     then do putStrLn "Authenticated!! Enter Q to exit!" 
             commandProcessor s
             sClose s 
-    else do putStrLn "Error!! Try again."
+    else do putStrLn "Error!! Bailing out..."
             sClose s
 
 -- | Read the user inputs in command line and process them  
@@ -53,7 +49,7 @@ authenticateRCON socket = do
   let (authPacket, pId) = buildRCONRequest msg 3
   let authReq = B.pack authPacket
   send socket authReq
-  response <- recv socket 4096
+  response <- recv socket _MAX_RECV_BYTES
   let resType = B.unpack $ B.take 4 (B.drop 4 response)
   return (resType, pId)
    
@@ -63,7 +59,7 @@ processRCONCommands socket msg = do
   let (rconPacket, pId) = buildRCONRequest msg 2
   let rconMessage = B.pack rconPacket
   send socket rconMessage
-  response <- recv socket 4096
+  response <- recv socket _MAX_RECV_BYTES
   let initResPayload = B.init $ B.init $ B.drop 12 response             -- get the Body of the RCON response
   let resPayload = B8.unpack $ BL.pack $ B.unpack initResPayload        -- convert from ByteString to String    
   if resPayload == ""
@@ -86,19 +82,14 @@ connectTo host port_ = do
 -- Output -> (RCON request packet :: [Word8], Packet ID :: [Word8])
 -- } 
 buildRCONRequest :: String -> Int -> ([Word8], [Word8])
-buildRCONRequest cmd pType = do
-  let packet = RCONPacket { size = 8
-                          , pktID = 0
-					      , pktType = pType
-					      , payload = BL.unpack $ B8.pack (cmd ++ "\0\0") }
-  let cmdLength = L.length (payload packet)
-  let pSize = processData ((size packet) + cmdLength)
-  let pId = processData (pktID packet)
-  let pType = processData (pktType packet)
-  let command = payload packet
-  let rconPacket = pSize ++ pId ++ pType ++ command
-  (rconPacket, pId)
-  where processData s = L.reverse $ toOctets (fromIntegral s :: Word32)
+buildRCONRequest cmd pktType = (rconPacket, pId)
+  where command = BL.unpack $ B8.pack (cmd ++ "\0\0")
+        cmdLength = L.length command
+        pSize = processData (8 + cmdLength)
+        pId = processData 0
+        pType = processData pktType
+        rconPacket = pSize ++ pId ++ pType ++ command
+        processData s = L.reverse $ toOctets (fromIntegral s :: Word32)
 
 -- | Conversion of Word32 type to [Word8] to construct RCON request
 toOctets :: Word32 -> [Word8]
