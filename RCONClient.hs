@@ -13,7 +13,7 @@ import qualified Data.ByteString.Lazy.Char8 as B8 ( pack, unpack )
 import qualified Data.ByteString.Char8 as BL8
 import qualified Data.ByteString as B ( pack, unpack, take, drop, init )
 import           System.Environment ( getArgs )
-  
+import           Data.Binary.Strict.Get  
 
 _MAX_RECV_BYTES = 1024  
   
@@ -42,7 +42,8 @@ commandProcessor socket = do
     else do processRCONCommands socket msg 
             commandProcessor socket
       
--- | Authenticate the client with the Minecraft server 
+-- | Authenticate the client with the Minecraft server
+authenticateRCON :: Socket -> IO ( [Word8], [Word8]) 
 authenticateRCON socket = do
   putStrLn "Enter RCON password: "
   msg <- getLine
@@ -50,9 +51,14 @@ authenticateRCON socket = do
   let authReq = B.pack authPacket
   send socket authReq
   response <- recv socket _MAX_RECV_BYTES
-  let resType = B.unpack $ B.take 4 (B.drop 4 response)
-  return (resType, pId)
-   
+  let pResponse = runGet constructResponse response
+  resType <- case (fst pResponse) of
+                Left err -> return 0
+                Right res -> getResType res
+  let responseType = L.reverse $ toOctets resType
+  return (responseType, pId)
+  where getResType (pid, ptype, pbody) = return ptype
+
 -- | Process the RCON commands except authentication 
 processRCONCommands :: Socket -> String -> IO ()
 processRCONCommands socket msg = do
@@ -60,11 +66,12 @@ processRCONCommands socket msg = do
   let rconMessage = B.pack rconPacket
   send socket rconMessage
   response <- recv socket _MAX_RECV_BYTES
-  let initResPayload = B.init $ B.init $ B.drop 12 response             -- get the Body of the RCON response
-  let resPayload = B8.unpack $ BL.pack $ B.unpack initResPayload        -- convert from ByteString to String    
+  let pResponse = runGet constructResponse response
+  let resPayload =  processResponse pResponse
   if resPayload == ""
     then putStr ""
     else putStrLn $ show resPayload
+  where processResponse = B.init . B.init . snd 
    
 -- | Establish a connection with the remote server 
 connectTo :: String -> Int -> IO Socket
@@ -91,6 +98,14 @@ buildRCONRequest cmd pktType = (rconPacket, pId)
         rconPacket = pSize ++ pId ++ pType ++ command
         processData s = L.reverse $ toOctets (fromIntegral s :: Word32)
 
+-- | Break the response ByteString into fields and construct a tuple
+constructResponse :: Get ( Word32, Word32, Word32 )  
+constructResponse = do
+            pktId <- getWord32le
+            pktType <- getWord32le
+            pBody <- getWord32le
+            return ( pktId, pktType, pBody )     
+        
 -- | Conversion of Word32 type to [Word8] to construct RCON request
 toOctets :: Word32 -> [Word8]
 toOctets w = 
